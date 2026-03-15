@@ -1,128 +1,189 @@
-# Reproducibility-Project
+# Neural Heuristics for Sliding Puzzles
 
-# Training a Neural Network to Solve the 15-Puzzle with IDA* Search
+> **Suggested repository name:** `neural-heuristics-sliding-puzzles`
+>
+> This name captures both the machine-learning core of the project
+> (neural-network-learned heuristics) and the problem domains studied
+> (15-puzzle and 24-puzzle sliding tile puzzles).
 
-This repository explores training a neural network to act as a heuristic function for the IDA* (Iterative Deepening A*) search algorithm in solving the 15-puzzle. The learned heuristic guides the search process towards the goal state.
+A reproducibility study of the paper
+["Utilising Uncertainty for Efficient Learning of Likely-Admissible Heuristics"](https://www.raillab.org/publication/marom-2020-utilising/marom-2020-utilising.pdf)
+(Marom & Rosman, 2020).  The project trains neural networks to serve as
+admissible heuristics for the IDA* search algorithm on the 15-puzzle and
+24-puzzle domains.
+
+---
+
+## Repository Structure
+
+```
+.
+├── src/
+│   ├── puzzle_15/           # 15-puzzle (4×4) implementation
+│   │   ├── environment.py   # Puzzle15 class, move generation, heuristics
+│   │   ├── neural_network.py# FFNN and WUNN model factories (TensorFlow/Keras)
+│   │   ├── algorithms.py    # GenerateTaskPrac, IDA*, LearnHeuristicPrac
+│   │   └── main.py          # Training entry point
+│   └── puzzle_24/           # 24-puzzle (5×5) implementation
+│       ├── environment.py   # State utils, pattern databases, feature extraction
+│       ├── neural_network.py# WeightUncertaintyNN, FeedForwardNN (PyTorch)
+│       ├── algorithms.py    # GenerateTaskPrac, IDA*, LearnHeuristicPrac
+│       └── main.py          # Training entry point
+├── notebooks/
+│   ├── 15_puzzle.ipynb      # Original exploratory notebook (15-puzzle)
+│   └── 24_puzzle_pdb.ipynb  # Original exploratory notebook (24-puzzle)
+├── requirements.txt
+└── README.md
+```
+
+---
 
 ## Project Overview
 
-### Environment
-- The environment is a 4x4 grid representing the 15-puzzle.
-- The `Puzzle15` class defines functionalities like state validation, move generation, cost calculation, and state encoding for neural network processing.
+### Problem Domains
 
-### Tasks
-- Tasks with increasing difficulty (number of moves to solve) are generated using the `generate_task_prac` function.
+| Domain    | Grid  | Tiles | State space |
+|-----------|-------|-------|-------------|
+| 15-puzzle | 4 × 4 | 15    | ~10¹³       |
+| 24-puzzle | 5 × 5 | 24    | ~10²⁵       |
 
 ### Algorithm
-The `learn_heuristic_prac` function iteratively trains the neural network:
-1. Generates tasks and attempts to solve them with IDA* using the current model.
-2. If solved, corresponding state-action pairs are added to a memory buffer.
-3. The memory buffer is used to train the neural network model.
-4. An exploration parameter is adjusted based on the success rate to balance exploration and exploitation.
 
-### Neural Network
-Two architectures are available:
-1. Simple feed-forward neural network with one hidden layer (FFNN).
-2. Weighted Universal Neural Network (WUNN) predicting cost distribution mean and log variance.
+The **LearnHeuristicPrac** procedure (Algorithm 1 in the paper) iterates
+between three phases:
 
-### Evaluation
-- The primary measure is the success rate of IDA* with the learned heuristic (percentage of solved tasks per iteration).
+1. **Task generation** (`GenerateTaskPrac`) – scrambles the goal state with
+   random moves (15-puzzle) or uses epistemic uncertainty from the WUNN to
+   select challenging states (24-puzzle).
+2. **Planning** – attempts to solve each task with IDA* using the current
+   FFNN heuristic.
+3. **Learning** – appends solved state–cost pairs to an experience replay
+   buffer and retrains both the FFNN and WUNN on a random mini-batch.
 
-## Running the Experiments
+### Neural Network Architectures
+
+| Name  | Framework      | Outputs              | Purpose                       |
+|-------|----------------|----------------------|-------------------------------|
+| FFNN  | TF/Keras (15)  | scalar cost          | heuristic for IDA*            |
+| WUNN  | TF/Keras (15)  | mean + log-variance  | uncertainty-guided exploration|
+| FFNN  | PyTorch (24)   | scalar cost          | heuristic for IDA*            |
+| WUNN  | PyTorch (24)   | scalar cost (MC drop)| epistemic uncertainty estimate|
+
+---
+
+## Getting Started
 
 ### Requirements
-- Python 3.x
-- TensorFlow
-- NumPy
 
-### Instructions
-1. Clone this repository:
-    ```bash
-   [git clone https://github.com/Samuel-Mbah/Reproducibility-Project.git]
-    cd 15-puzzle-heuristics
-    ```
+- Python 3.9+
+- TensorFlow 2.13 (15-puzzle)
+- PyTorch 2.0 (24-puzzle)
+- NumPy, SciPy
 
-2. Create a virtual environment (optional but recommended):
-    ```bash
-    python -m venv venv
-    source venv/bin/activate  # On Windows use `venv\Scripts\activate`
-    ```
+### Installation
 
-3. Install the required libraries:
-    ```bash
-    pip install -r requirements.txt
-    ```
+```bash
+git clone https://github.com/Samuel-Mbah/Reproducibility-Project.git
+cd Reproducibility-Project
 
-4. Open the Jupyter Notebook and follow the steps to run the implementation and reproduce the experiments:
-    ```bash
-    jupyter notebook 15_puzzle.ipynb
-    ```
-5. Follow the same steps as above for the 24 puzzle domain
+# Create and activate a virtual environment (recommended)
+python -m venv venv
+source venv/bin/activate   # Windows: venv\Scripts\activate
+
+pip install -r requirements.txt
+```
+
+### Running the Experiments
+
+**15-puzzle**
+```bash
+python -m src.puzzle_15.main
+```
+
+**24-puzzle**
+```bash
+python -m src.puzzle_24.main
+```
+
 ### Configuration
-Configure training parameters in the code as needed. Key parameters include the number of iterations, tasks per iteration, exploration parameters, and neural network architecture.
 
-## Implementation Details
+Training hyper-parameters are defined as dictionaries inside each `main.py`.
+Key parameters:
 
-### Imports and Dependencies
-Ensure all necessary libraries are imported at the beginning of the notebook.
+| Parameter                  | Description                                        |
+|----------------------------|----------------------------------------------------|
+| `num_iter`                 | Number of training iterations                      |
+| `num_tasks_per_iter`       | Tasks attempted per iteration                      |
+| `num_tasks_per_iter_thresh`| Min solved tasks to keep α stable                  |
+| `alpha0`                   | Initial Gaussian quantile confidence level α       |
+| `delta`                    | Step for decreasing α on low success rate          |
+| `epsilon`                  | Epistemic uncertainty threshold (task generation)  |
+| `memory_buffer_max_records`| Experience replay buffer capacity                  |
+| `train_iter`               | FFNN training epochs per iteration                 |
+| `max_train_iter`           | WUNN training epochs per iteration                 |
+| `K`                        | Monte-Carlo forward passes for uncertainty         |
 
-### Utility Functions
-Define utility functions such as puzzle generation, solving the puzzle, and heuristic learning.
+### Jupyter Notebooks
 
-### Parameters and Hyperparameters
-Define all necessary parameters and hyperparameters for training and evaluation.
+The original exploratory notebooks are preserved in `notebooks/` for
+reference and interactive experimentation:
 
-### Model Training
-Train the heuristic model based on the provided parameters.
+```bash
+jupyter notebook notebooks/15_puzzle.ipynb
+jupyter notebook notebooks/24_puzzle_pdb.ipynb
+```
 
-### Evaluation and Analysis
-Evaluate the trained model on test data and analyze the results.
+---
 
 ## Results
-Our experiments aimed to reproduce the results presented in the paper ["Utilising Uncertainty for Efficient Learning of Likely-Admissible Heuristics"](https://www.raillab.org/publication/marom-2020-utilising/marom-2020-utilising.pdf). Despite rigorous efforts and multiple trials, we were unable to replicate the results as reported. Below is a detailed summary of our findings:
 
-- **Implementation Success**:
-  - Successfully implemented the `GenerateTaskPrac` algorithm for task generation.
-  - Seamlessly integrated the IDA* algorithm for heuristic search.
+Our experiments aimed to reproduce the results reported in Marom & Rosman
+(2020). Despite rigorous efforts and multiple trials, we were unable to
+fully replicate the paper's findings. Below is a summary:
 
-- **Challenges Encountered**:
-  - The `LearnHeuristicsPrac` algorithm did not converge, resulting in a continuous run without producing the expected results.
-  - Significant difficulty in implementing the `LearnHeuristicsPrac` algorithm due to the complexity of integrating aleatoric and epistemic uncertainties within the neural network.
+### What Worked
 
-- **Hardware and Computational Resources**:
-  - Experiments were conducted on an Intel i5-12450H 2.00GHz CPU with 32GB RAM.
-  - Initial training for the 15-puzzle took approximately 12 hours but did not yield positive results. Subsequent trials averaged around 8 hours each with similar outcomes.
+- ✅ Successfully implemented **GenerateTaskPrac** for both domains.
+- ✅ IDA* with Manhattan-distance heuristic solves the 15-puzzle correctly.
+- ✅ Training loop runs end-to-end without errors.
 
-- **Evaluation Measures**:
-  - Despite using the parameters and methodology described in the paper, our implementation did not produce results that supported the main claims of the original study.
+### Challenges
+
+- ❌ **LearnHeuristicPrac did not converge** – the algorithm ran for many
+  hours without producing a meaningful improvement in the success rate.
+- ❌ **WUNN complexity** – integrating aleatoric and epistemic uncertainties
+  in the C# → Python port introduced subtle differences in training dynamics.
+- ⚠️ **Computational cost** – initial training on an Intel i5-12450H 2.00 GHz
+  CPU with 32 GB RAM took ~12 hours per run without positive results.
 
 ### Key Metrics
 
-- **Generated Nodes**: Unable to achieve meaningful results due to non-convergence.
-- **Planning Time**: Not applicable due to the lack of convergence.
-- **Suboptimality**: Not applicable due to the lack of convergence.
-- **Optimal Solved Percentage**: Unable to determine due to non-convergence.
-
-### Strengths and Weaknesses
-
-- **Strengths**:
-  - Successful implementation of the task generation algorithm.
-  - Effective integration of the IDA* search algorithm.
-
-- **Weaknesses**:
-  - Challenges in re-implementing the learning algorithm in Python from the provided C# code.
-  - Computational constraints and extensive training requirements that may necessitate more powerful hardware or optimized implementation.
+| Metric                  | Paper (claimed) | Our reproduction |
+|-------------------------|-----------------|------------------|
+| Generated Nodes (mean)  | reported        | N/A (no convergence) |
+| Planning Time (mean, s) | reported        | N/A              |
+| Suboptimality (%)       | reported        | N/A              |
+| Optimal Solved (%)      | reported        | N/A              |
 
 ### Conclusion
 
-Our efforts to reproduce the results of the original paper were met with significant challenges, particularly with the `LearnHeuristicsPrac` algorithm. Despite thorough attempts to follow the provided methodology, we were unable to support the claims made in the original study based on our findings.
+Re-implementing the learning algorithm from the original C# codebase in
+Python introduced challenges that prevented convergence within the available
+computational budget. The IDA* search and task-generation components work
+correctly; the bottleneck is the WUNN-guided exploration loop.
 
+---
 
 ## References
-- [Original Paper](https://www.raillab.org/publication/marom-2020-utilising/marom-2020-utilising.pdf)
-- [Supplementary Material](https://www.raillab.org/publication/marom-2020-utilising/marom-2020-utilising_supp.pdf)
 
+- Marom, O., & Rosman, B. (2020). *Utilising Uncertainty for Efficient
+  Learning of Likely-Admissible Heuristics.*
+  [Paper](https://www.raillab.org/publication/marom-2020-utilising/marom-2020-utilising.pdf) |
+  [Supplementary](https://www.raillab.org/publication/marom-2020-utilising/marom-2020-utilising_supp.pdf)
 
+---
 
 ## Contact
-For any questions or collaboration requests, please contact smwmbah@gmail.com(mailto:smwmbah@gmail.com).
+
+For questions or collaboration requests, please contact
+[smwmbah@gmail.com](mailto:smwmbah@gmail.com).
