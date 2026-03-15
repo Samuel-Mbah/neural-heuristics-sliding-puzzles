@@ -1,11 +1,6 @@
 # Neural Heuristics for Sliding Puzzles
 
-> **Suggested repository name:** `neural-heuristics-sliding-puzzles`
 >
-> This name captures both the machine-learning core of the project
-> (neural-network-learned heuristics) and the problem domains studied
-> (15-puzzle and 24-puzzle sliding tile puzzles).
-
 A reproducibility study of the paper
 ["Utilising Uncertainty for Efficient Learning of Likely-Admissible Heuristics"](https://www.raillab.org/publication/marom-2020-utilising/marom-2020-utilising.pdf)
 (Marom & Rosman, 2020).  The project trains neural networks to serve as
